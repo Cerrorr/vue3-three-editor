@@ -1,16 +1,11 @@
-import { BaseManager } from './BaseManager'
-import type { MainManager } from './MainManager'
+import { container } from '@/three/container/DIContainer'
 
-export class PhysicsManager extends BaseManager {
-  constructor(manager: MainManager) {
-    super(manager)
-  }
+import {} from 'three'
 
-  init(): void {}
+export class PostProcessingManager {
+  constructor() {}
 
-  updated(dt: number): void {}
+  update(dt: number): void {}
 
-  clear(): void {
-    super.clear()
-  }
+  clear(): void {}
 }

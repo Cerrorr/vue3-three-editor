@@ -1,17 +1,11 @@
-import { BaseManager } from './BaseManager'
-import type { MainManager } from './MainManager'
+import { container } from '@/three/container/DIContainer'
 
-export class AnimationManager extends BaseManager {
-  constructor(manager: MainManager) {
-    super(manager)
-  }
+import {} from 'three'
 
-  updated(dt: number): void {
-    console.log('AnimationManager updated')
-  }
+export class AnimationManager {
+  constructor() {}
 
-  clear(): void {
-    console.log('AnimationManager cleared')
-    super.clear()
-  }
+  update(dt: number): void {}
+
+  clear(): void {}
 }

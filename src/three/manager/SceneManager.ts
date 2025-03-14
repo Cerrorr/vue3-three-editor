@@ -1,17 +1,17 @@
-import { BaseManager } from './BaseManager'
-import type { MainManager } from './MainManager'
+import { Scene } from 'three'
 
-export class SceneManager extends BaseManager {
-  constructor(manager: MainManager) {
-    super(manager)
+export class SceneManager {
+  private scene: Scene
+
+  constructor() {
+    this.scene = new Scene()
   }
 
-  updated(dt: number): void {
-    console.log('SceneManager updated')
+  getScene(): Scene {
+    return this.scene
   }
 
-  clear(): void {
-    console.log('SceneManager cleared')
-    super.clear()
-  }
+  update(dt: number): void {}
+
+  clear(): void {}
 }

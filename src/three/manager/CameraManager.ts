@@ -1,16 +1,34 @@
-import { BaseManager } from './BaseManager'
-import type { MainManager } from './MainManager'
+import { container } from '@/three/container/DIContainer'
 
-export class CameraManager extends BaseManager {
-  constructor(manager: MainManager) {
-    super(manager)
+import { Camera, PerspectiveCamera } from 'three'
+
+export class CameraManager {
+  private defaultCamera: PerspectiveCamera
+  private activeCamera: PerspectiveCamera
+  private el: HTMLElement
+
+  constructor() {
+    this.el = container.resolve<HTMLElement>('RenderContainer')
+
+    const fov = 60
+    const aspect = this.el.clientWidth / this.el.clientHeight
+    const near = 0.01
+    const far = 1000
+
+    this.defaultCamera = new PerspectiveCamera(fov, aspect, near, far)
+    this.activeCamera = this.defaultCamera
+
+    this.activeCamera.position.set(0, 5, 5)
   }
 
-  init(): void {}
+  // 获取摄像机实例
+  getActiveCamera(): Camera {
+    return this.activeCamera
+  }
 
-  updated(dt: number): void {}
+  update(dt: number): void {}
 
   clear(): void {
-    super.clear()
+    this.activeCamera = undefined!
   }
 }

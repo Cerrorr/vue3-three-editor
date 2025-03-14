@@ -2,7 +2,7 @@ import { container } from '@/three/container/DIContainer'
 
 import {} from 'three'
 
-export class PhysicsManager {
+export class LoaderManager {
   constructor() {}
 
   update(dt: number): void {}

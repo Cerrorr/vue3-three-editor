@@ -1,35 +1,72 @@
+import { container } from '@/three/container/DIContainer'
+
 import { SceneManager } from './SceneManager'
+import { CameraManager } from './CameraManager'
+import { LightManager } from './LightManager'
+import { HelperManager } from './HelperManager'
+import { RendererManager } from './RendererManager'
+import { ControlsManager } from './ControlsManager'
+
+import { Clock } from 'three'
 
 export class MainManager {
-  private el: HTMLElement
-  private options: any
-  private sceneManager!: SceneManager
+  private sceneManager: SceneManager
+  private cameraManager: CameraManager 
+  private rendererManager: RendererManager
+  private LightManager: LightManager
+  private HelperManager: HelperManager
+  private controlsManager: ControlsManager
+  private animationFrameId!: number
+  private lastTime = 0
+  private clock: Clock
 
-  constructor(el: HTMLElement, options: any) {
-    this.el = el
-    this.options = options
-    this.init()
+  constructor(el: HTMLElement) {
+    container.register('RenderContainer', el)
+
+    this.sceneManager = new SceneManager()
+    container.register('SceneManager', this.sceneManager)
+
+    this.cameraManager = new CameraManager()
+    container.register('CameraManager', this.cameraManager)
+
+    this.LightManager = new LightManager()
+    container.register('LightManager', this.LightManager)
+
+    this.HelperManager = new HelperManager()
+    container.register('HelperManager', this.HelperManager)
+
+    this.rendererManager = new RendererManager()
+    container.register('RendererManager', this.rendererManager)
+
+    this.controlsManager = new ControlsManager()
+    container.register('ControlsManager', this.controlsManager)
+
+    this.clock = new Clock()
+    this.upadte()
   }
 
-  private init(): void {
-    const scope = this
+  private upadte = (): void => {
+    const dt = this.clock.getDelta()
 
-    this.sceneManager = new SceneManager(scope)
-  }
+    this.animationFrameId = requestAnimationFrame(this.upadte)
 
-  updated(dt: number): void {
-    this.sceneManager && this.sceneManager.updated(dt)
+    this.sceneManager.update(dt)
+    this.cameraManager.update(dt)
+    this.LightManager.update(dt)
+    this.HelperManager.update(dt)
+    this.rendererManager.update(dt)
+    this.controlsManager.update(dt)
   }
 
   clear(): void {
-    this.sceneManager && this.sceneManager.clear()
-  }
+    cancelAnimationFrame(this.animationFrameId)
 
-  public getElement(): HTMLElement {
-    return this.el
-  }
-
-  public getSceneManager(): SceneManager {
-    return this.sceneManager
+    this.sceneManager.clear()
+    this.cameraManager.clear()
+    this.LightManager.clear()
+    this.HelperManager.clear()
+    this.rendererManager.clear()
+    this.controlsManager.clear()
+    console.log('Three.js resources cleared.')
   }
 }
