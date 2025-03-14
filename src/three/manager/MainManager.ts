@@ -11,13 +11,12 @@ import { Clock } from 'three'
 
 export class MainManager {
   private sceneManager: SceneManager
-  private cameraManager: CameraManager 
+  private cameraManager: CameraManager
   private rendererManager: RendererManager
   private LightManager: LightManager
   private HelperManager: HelperManager
   private controlsManager: ControlsManager
   private animationFrameId!: number
-  private lastTime = 0
   private clock: Clock
 
   constructor(el: HTMLElement) {
