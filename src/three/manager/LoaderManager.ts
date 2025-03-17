@@ -1,9 +1,22 @@
 import { container } from '@/three/container/DIContainer'
 
-import {} from 'three'
+import {LoadingManager} from 'three'
 
 export class LoaderManager {
-  constructor() {}
+  constructor() {
+    
+  }
+
+  loadGltf(): void {
+
+  }
+
+  loadGltfs(): void {
+
+  }
+
+  loadTexture(): void {}
+
 
   update(dt: number): void {}
 

@@ -6,16 +6,19 @@ import { LightManager } from './LightManager'
 import { HelperManager } from './HelperManager'
 import { RendererManager } from './RendererManager'
 import { ControlsManager } from './ControlsManager'
+import { GUIManager } from './GUIManager'
 
 import { Clock } from 'three'
+
 
 export class MainManager {
   private sceneManager: SceneManager
   private cameraManager: CameraManager
   private rendererManager: RendererManager
-  private LightManager: LightManager
-  private HelperManager: HelperManager
+  private lightManager: LightManager
+  private helperManager: HelperManager
   private controlsManager: ControlsManager
+  private GUIManager: GUIManager
   private animationFrameId!: number
   private clock: Clock
 
@@ -28,11 +31,11 @@ export class MainManager {
     this.cameraManager = new CameraManager()
     container.register('CameraManager', this.cameraManager)
 
-    this.LightManager = new LightManager()
-    container.register('LightManager', this.LightManager)
+    this.lightManager = new LightManager()
+    container.register('LightManager', this.lightManager)
 
-    this.HelperManager = new HelperManager()
-    container.register('HelperManager', this.HelperManager)
+    this.helperManager = new HelperManager()
+    container.register('HelperManager', this.helperManager)
 
     this.rendererManager = new RendererManager()
     container.register('RendererManager', this.rendererManager)
@@ -40,7 +43,13 @@ export class MainManager {
     this.controlsManager = new ControlsManager()
     container.register('ControlsManager', this.controlsManager)
 
+    this.GUIManager = new GUIManager()
+    container.register('GUImanager',this.GUIManager)
+
+
     this.clock = new Clock()
+    
+    this.upadte = this.upadte.bind(this)
     this.upadte()
   }
 
@@ -51,10 +60,11 @@ export class MainManager {
 
     this.sceneManager.update(dt)
     this.cameraManager.update(dt)
-    this.LightManager.update(dt)
-    this.HelperManager.update(dt)
+    this.lightManager.update(dt)
+    this.helperManager.update(dt)
     this.rendererManager.update(dt)
     this.controlsManager.update(dt)
+    this.GUIManager.update(dt)
   }
 
   clear(): void {
@@ -62,10 +72,11 @@ export class MainManager {
 
     this.sceneManager.clear()
     this.cameraManager.clear()
-    this.LightManager.clear()
-    this.HelperManager.clear()
+    this.lightManager.clear()
+    this.helperManager.clear()
     this.rendererManager.clear()
     this.controlsManager.clear()
+    this.GUIManager.clear()
     console.log('Three.js resources cleared.')
   }
 }
