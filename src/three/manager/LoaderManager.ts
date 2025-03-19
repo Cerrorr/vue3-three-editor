@@ -1,17 +1,21 @@
 import { container } from '@/three/container/DIContainer'
 import type { RendererManager } from './RendererManager'
 
-import { LoadingManager, type Object3DEventMap, Object3D } from 'three'
+import { LoadingManager, Object3D, TextureLoader, Texture } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js'
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js'
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
-
-import JSZip from 'jszip'
 import { MTLLoader } from 'three/examples/jsm/Addons.js'
 
+import JSZip from 'jszip'
+
+/**
+ * LoaderManager 类 - 负责处理各种3D模型和纹理的加载
+ * 支持 GLTF/GLB, OBJ/MTL, FBX 格式以及包含这些模型的ZIP文件
+ */
 export class LoaderManager {
   private loadingManager: LoadingManager
   private dracoLoader: DRACOLoader
@@ -20,371 +24,511 @@ export class LoaderManager {
   private objLoader: OBJLoader
   private fbxLoader: FBXLoader
   private mtlLoader: MTLLoader
+  private textureLoader: TextureLoader
   rendererManager: RendererManager
 
-  // 存储从ZIP提取的文件URL，用于清理
+  // 存储从ZIP提取的文件URL，用于后续清理
   private extractedUrls: string[] = []
+
+  // 支持的文件格式
+  private static readonly SUPPORTED_FORMATS = ['gltf', 'glb', 'obj', 'fbx', 'zip']
 
   constructor() {
     this.rendererManager = container.resolve<RendererManager>('RendererManager')
 
-    // 跟踪加载进度
-    this.loadingManager = new LoadingManager()
-    this.loadingManager.onStart = (url, itemsLoaded, itemsTotal) => {
-      console.log(`开始加载: ${url} (${itemsLoaded}/${itemsTotal})`)
-    }
-    this.loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
-      console.log(`加载进度: ${url} (${itemsLoaded}/${itemsTotal})`)
-    }
-    this.loadingManager.onLoad = () => {
-      console.log('所有资源加载完成！')
-    }
-    this.loadingManager.onError = (url) => {
-      console.error(`加载失败: ${url}`)
-    }
+    // 创建加载管理器以跟踪整体加载进度
+    this.loadingManager = new LoadingManager(
+      () => console.log('所有资源加载完成！'),
+      (url, itemsLoaded, itemsTotal) => console.log(`加载进度: ${url} (${itemsLoaded}/${itemsTotal})`),
+      (url) => console.error(`加载失败: ${url}`)
+    )
 
-    // 解码 .gltf/.glb 文件中的 DRACO 压缩网格数据
-    this.dracoLoader = new DRACOLoader().setDecoderPath('draco/')
-    // 支持 KTX2 纹理格式，用于优化加载效率
-    this.ktx2Loader = new KTX2Loader().setTranscoderPath('basis/').detectSupport(this.rendererManager.getRenderer())
+    // 初始化DRACO解码器 - 用于解压GLTF中的压缩网格
+    this.dracoLoader = new DRACOLoader().setDecoderPath('draco/') // 设置解码器路径
 
-    // 配置 GLTF 加载器
-    this.gltfLoader = new GLTFLoader(this.loadingManager).setCrossOrigin('anonymous').setDRACOLoader(this.dracoLoader).setKTX2Loader(this.ktx2Loader).setMeshoptDecoder(MeshoptDecoder)
+    // 初始化KTX2加载器 - 支持高效压缩纹理格式
+    this.ktx2Loader = new KTX2Loader()
+      .setTranscoderPath('basis/') // 设置转码器路径
+      .detectSupport(this.rendererManager.getRenderer()) // 检测浏览器支持
 
-    // OBJ 和 FBX 不需要额外的 Loader 配置
+    // 配置GLTF加载器
+    this.gltfLoader = new GLTFLoader(this.loadingManager)
+      .setCrossOrigin('anonymous') // 允许跨域加载
+      .setDRACOLoader(this.dracoLoader) // 配置DRACO解码
+      .setKTX2Loader(this.ktx2Loader) // 支持KTX2纹理
+      .setMeshoptDecoder(MeshoptDecoder) // 设置网格优化解码器
+
     this.objLoader = new OBJLoader(this.loadingManager)
     this.fbxLoader = new FBXLoader(this.loadingManager)
-    // 用于加载 .mtl 材质
     this.mtlLoader = new MTLLoader(this.loadingManager)
+    this.textureLoader = new TextureLoader(this.loadingManager)
+  }
+
+  // 创建URL并添加到提取列表中的辅助方法
+  private createObjectURL(blob: Blob): string {
+    const url = URL.createObjectURL(blob)
+    this.extractedUrls.push(url)
+    return url
   }
 
   /**
-   * 加载模型（支持 .gltf, .glb, .obj, .fbx 以及 .zip）
-   * @param file 3D 模型文件或 ZIP 压缩包
-   * @param callback 处理加载后模型的回调函数
+   * 加载模型 - 支持多种格式和ZIP压缩包
+   *
+   * @param file 3D模型文件或包含模型的ZIP压缩包
+   * @param callback 加载完成后的回调函数，接收加载的模型对象
+   * @param onProgress 可选的进度回调函数
    * @returns Promise，解析后的模型对象
    */
-  loadModel(file: File, callback: (model: Object3D) => void): Promise<Object3D> {
+  async loadModel(file: File, callback?: (model: Object3D) => void, onProgress?: (event: ProgressEvent) => void): Promise<Object3D> {
+    // 获取文件扩展名并检查有效性
     const fileExtension = this.getFileExtension(file)
-    if (!fileExtension) {
-      return Promise.reject(new Error('无法识别的文件类型'))
+
+    if (!fileExtension || !LoaderManager.SUPPORTED_FORMATS.includes(fileExtension)) {
+      throw new Error(`不支持的文件格式: ${fileExtension || '未知'}`)
     }
 
-    return fileExtension === 'zip'
-      ? this.loadFromZip(file).then((model) => {
-          callback(model)
-          return model
-        })
-      : this.loadFromFile(file).then((model) => {
-          callback(model)
-          return model
-        })
+    // 根据文件类型选择加载方法
+    let model: Object3D
+    if (fileExtension === 'zip') {
+      model = await this.loadFromZip(file, onProgress)
+    } else {
+      model = await this.loadFromFile(file, onProgress)
+    }
+
+    // 如果提供了回调，则调用
+    if (callback) callback(model)
+    return model
   }
 
   /**
-   * 解析并加载 ZIP 文件中的 3D 模型及其关联资源
-   * @param file ZIP 文件
+   * 解析并加载ZIP文件中的3D模型及其关联资源
+   *
+   * @param file ZIP文件
+   * @param onProgress 可选的进度回调函数
    * @returns Promise，解析后的模型对象
    */
-  private async loadFromZip(file: File): Promise<Object3D> {
+  private async loadFromZip(file: File, onProgress?: (event: ProgressEvent) => void): Promise<Object3D> {
     const zip = new JSZip()
 
     try {
-      // 清理之前创建的URL对象
+      // 清理之前提取的资源
       this.cleanupExtractedUrls()
 
       // 加载并解析ZIP文件
-      const zipContent = await zip.loadAsync(file)
+      const zipContent = await zip.loadAsync(file, {
+        checkCRC32: true, // 验证文件完整性
+      })
+
+      // 获取ZIP文件列表
+      const zipFiles = Object.keys(zipContent.files).filter((name) => !zipContent.files[name].dir) // 只保留文件，排除目录
 
       // 查找主要模型文件
-      const zipFiles = Object.keys(zipContent.files)
-      const modelFileEntry = zipFiles.find((name) => /\.(gltf|glb|obj|fbx)$/i.test(name) && !zipContent.files[name].dir)
+      const modelFileEntry = zipFiles.find((name) => /\.(gltf|glb|obj|fbx)$/i.test(name))
 
       if (!modelFileEntry) {
-        throw new Error('ZIP 压缩包中未找到有效的 .gltf, .glb, .obj, .fbx 文件')
+        throw new Error('ZIP压缩包中未找到有效的3D模型文件(.gltf, .glb, .obj, .fbx)')
       }
 
-      const modelFileExtension = modelFileEntry.split('.').pop()?.toLowerCase()
+      // 获取模型文件扩展名
+      const modelFileExtension = this.getFileExtension(new File([new Blob()], modelFileEntry))
 
-      // 处理GLTF格式，需要特殊处理关联文件
-      if (modelFileExtension === 'gltf') {
-        return await this.loadGltfFromZip(zipContent, modelFileEntry, zipFiles)
+      // 使用映射代替switch语句
+      const loaderMap: Record<string, (content: JSZip, path: string, files: string[]) => Promise<Object3D>> = {
+        gltf: this.loadGltfFromZip.bind(this),
+        obj: this.loadObjFromZip.bind(this),
+        glb: async (content, path) => {
+          const modelBlob = await content.files[path].async('blob')
+          const modelFile = new File([modelBlob], path, {
+            type: 'application/octet-stream',
+          })
+          return this.loadFromFile(modelFile)
+        },
+        fbx: async (content, path) => {
+          const modelBlob = await content.files[path].async('blob')
+          const modelFile = new File([modelBlob], path, {
+            type: 'application/octet-stream',
+          })
+          return this.loadFromFile(modelFile)
+        },
       }
-      // 处理OBJ格式，可能需要MTL文件
-      else if (modelFileExtension === 'obj') {
-        return await this.loadObjFromZip(zipContent, modelFileEntry, zipFiles)
+
+      const loader = loaderMap[modelFileExtension]
+      if (!loader) {
+        throw new Error(`不支持的模型格式: ${modelFileExtension}`)
       }
-      // 其他格式(GLB/FBX)直接加载单文件
-      else {
-        const modelBlob = await zipContent.files[modelFileEntry].async('blob')
-        const modelFile = new File([modelBlob], modelFileEntry, { type: 'application/octet-stream' })
-        return this.loadFromFile(modelFile)
-      }
-    } catch (error) {
+
+      return await loader(zipContent, modelFileEntry, zipFiles)
+    } catch (error: any) {
+      // 确保清理所有提取的URLs
       this.cleanupExtractedUrls()
-      throw new Error(`解压 ZIP 失败: ${error.message}`)
+      throw new Error(`解压或处理ZIP失败: ${error.message}`)
     }
   }
 
   /**
    * 从ZIP中加载GLTF模型及其所有关联资源
+   *
+   * @param zipContent 解析后的ZIP内容
+   * @param gltfPath GLTF文件路径
+   * @param allFiles ZIP中的所有文件路径
+   * @returns Promise，解析后的模型对象
    */
   private async loadGltfFromZip(zipContent: JSZip, gltfPath: string, allFiles: string[]): Promise<Object3D> {
     try {
-      // 首先读取GLTF文件内容
+      // 读取GLTF文件内容
       const gltfBlob = await zipContent.files[gltfPath].async('blob')
       const gltfText = await gltfBlob.text()
       const gltfJson = JSON.parse(gltfText)
 
       // 获取GLTF文件所在目录路径
-      const gltfDir = gltfPath.includes('/') ? gltfPath.substring(0, gltfPath.lastIndexOf('/') + 1) : ''
+      const gltfDir = this.getDirectoryPath(gltfPath)
 
-      // 提取并创建所有关联文件的URLs
+      // 用于存储原始路径与生成URL的映射
       const fileMap = new Map<string, string>()
 
-      // 1. 处理bin文件
-      if (gltfJson.buffers) {
-        for (const buffer of gltfJson.buffers) {
-          if (buffer.uri && !buffer.uri.startsWith('data:')) {
-            const bufferPath = this.normalizePath(gltfDir + buffer.uri)
-            if (zipContent.files[bufferPath]) {
-              const bufferBlob = await zipContent.files[bufferPath].async('blob')
-              const bufferUrl = URL.createObjectURL(bufferBlob)
-              fileMap.set(buffer.uri, bufferUrl)
-              this.extractedUrls.push(bufferUrl)
-            }
-          }
-        }
-      }
+      // 处理所有资源
+      await Promise.all([
+        // 处理binary buffer文件
+        gltfJson.buffers && this.processGltfBuffers(gltfJson.buffers, gltfDir, zipContent, fileMap),
+        // 处理图像/纹理文件
+        gltfJson.images && this.processGltfImages(gltfJson.images, gltfDir, zipContent, fileMap),
+      ])
 
-      // 2. 处理图像/纹理文件
-      if (gltfJson.images) {
-        for (const image of gltfJson.images) {
-          if (image.uri && !image.uri.startsWith('data:')) {
-            const imagePath = this.normalizePath(gltfDir + image.uri)
-            if (zipContent.files[imagePath]) {
-              const imageBlob = await zipContent.files[imagePath].async('blob')
-              const imageUrl = URL.createObjectURL(imageBlob)
-              fileMap.set(image.uri, imageUrl)
-              this.extractedUrls.push(imageUrl)
-            }
-          }
-        }
-      }
+      // 修改GLTF文件中的URI引用
+      const modifiedGltfText = this.replaceUrisInText(gltfText, fileMap)
 
-      // 3. 修改GLTF文件中的URI引用
-      let modifiedGltfText = gltfText
-      for (const [originalPath, url] of fileMap.entries()) {
-        modifiedGltfText = modifiedGltfText.replace(new RegExp(`"${this.escapeRegExp(originalPath)}"`, 'g'), `"${url}"`)
-      }
-
-      // 4. 创建修改后的GLTF文件
-      const modifiedGltfBlob = new Blob([modifiedGltfText], { type: 'application/json' })
-      const gltfUrl = URL.createObjectURL(modifiedGltfBlob)
-      this.extractedUrls.push(gltfUrl)
-
-      // 5. 加载修改后的GLTF
-      return new Promise((resolve, reject) => {
-        this.gltfLoader.load(
-          gltfUrl,
-          (gltf) => resolve(gltf.scene || gltf.scenes[0]),
-          undefined,
-          (error) => {
-            this.cleanupExtractedUrls()
-            reject(new Error(`GLTF 加载失败: ${error.message}`))
-          }
-        )
+      // 创建修改后的GLTF文件
+      const modifiedGltfBlob = new Blob([modifiedGltfText], {
+        type: 'application/json',
       })
-    } catch (error) {
+      const gltfUrl = this.createObjectURL(modifiedGltfBlob)
+
+      // 加载修改后的GLTF
+      return await this.loadGltfFromUrl(gltfUrl)
+    } catch (error: any) {
       this.cleanupExtractedUrls()
-      throw new Error(`处理 GLTF 文件失败: ${error.message}`)
+      throw new Error(`处理GLTF文件失败: ${error.message}`)
+    }
+  }
+
+  /**
+   * 从URL加载GLTF模型
+   */
+  private loadGltfFromUrl(url: string): Promise<Object3D> {
+    return new Promise((resolve, reject) => {
+      this.gltfLoader.load(
+        url,
+        (gltf) => resolve(gltf.scene || gltf.scenes[0]),
+        undefined,
+        (error: any) => {
+          this.cleanupExtractedUrls()
+          reject(new Error(`GLTF加载失败: ${error.message}`))
+        }
+      )
+    })
+  }
+
+  /**
+   * 获取文件所在目录路径
+   */
+  private getDirectoryPath(filePath: string): string {
+    return filePath.includes('/') ? filePath.substring(0, filePath.lastIndexOf('/') + 1) : ''
+  }
+
+  /**
+   * 处理GLTF中的二进制buffer文件
+   */
+  private async processGltfBuffers(buffers: any[], baseDir: string, zipContent: JSZip, fileMap: Map<string, string>): Promise<void> {
+    for (const buffer of buffers) {
+      if (buffer.uri && !buffer.uri.startsWith('data:')) {
+        const bufferPath = this.normalizePath(baseDir + buffer.uri)
+        if (zipContent.files[bufferPath]) {
+          const bufferBlob = await zipContent.files[bufferPath].async('blob')
+          const bufferUrl = URL.createObjectURL(bufferBlob)
+          fileMap.set(buffer.uri, bufferUrl)
+          this.extractedUrls.push(bufferUrl)
+        }
+      }
+    }
+  }
+
+  /**
+   * 处理GLTF中的图像文件
+   */
+  private async processGltfImages(images: any[], baseDir: string, zipContent: JSZip, fileMap: Map<string, string>): Promise<void> {
+    for (const image of images) {
+      if (image.uri && !image.uri.startsWith('data:')) {
+        const imagePath = this.normalizePath(baseDir + image.uri)
+        if (zipContent.files[imagePath]) {
+          const imageBlob = await zipContent.files[imagePath].async('blob')
+          const imageUrl = URL.createObjectURL(imageBlob)
+          fileMap.set(image.uri, imageUrl)
+          this.extractedUrls.push(imageUrl)
+        }
+      }
     }
   }
 
   /**
    * 从ZIP中加载OBJ模型及其MTL材质
+   *
+   * @param zipContent 解析后的ZIP内容
+   * @param objPath OBJ文件路径
+   * @param allFiles ZIP中的所有文件路径
+   * @returns Promise，解析后的模型对象
    */
   private async loadObjFromZip(zipContent: JSZip, objPath: string, allFiles: string[]): Promise<Object3D> {
     try {
       // 获取OBJ文件内容
       const objBlob = await zipContent.files[objPath].async('blob')
-      const objUrl = URL.createObjectURL(objBlob)
-      this.extractedUrls.push(objUrl)
+      const objUrl = this.createObjectURL(objBlob)
 
-      // 查找相关的MTL文件
-      const objDir = objPath.includes('/') ? objPath.substring(0, objPath.lastIndexOf('/') + 1) : ''
+      // 确定OBJ文件所在目录
+      const objDir = this.getDirectoryPath(objPath)
       const objText = await objBlob.text()
 
-      // 从OBJ内容中提取MTL引用
+      // 从OBJ内容中查找MTL文件引用
       const mtlMatch = objText.match(/mtllib\s+([^\s]+)/i)
-      let mtlPath = null
       let mtlUrl = null
 
+      // 如果找到MTL引用，则处理MTL文件
       if (mtlMatch && mtlMatch[1]) {
-        mtlPath = this.normalizePath(objDir + mtlMatch[1])
-
-        // 检查MTL文件是否存在于ZIP中
-        if (zipContent.files[mtlPath]) {
-          const mtlBlob = await zipContent.files[mtlPath].async('blob')
-          mtlUrl = URL.createObjectURL(mtlBlob)
-          this.extractedUrls.push(mtlUrl)
-
-          // 处理MTL中引用的纹理
-          const mtlText = await mtlBlob.text()
-          const textureMatches = [...mtlText.matchAll(/map_\w+\s+([^\s]+)/g)]
-
-          // 创建纹理URL字典
-          const textureMap = new Map<string, string>()
-
-          for (const match of textureMatches) {
-            const texturePath = this.normalizePath(objDir + match[1])
-            if (zipContent.files[texturePath]) {
-              const textureBlob = await zipContent.files[texturePath].async('blob')
-              const textureUrl = URL.createObjectURL(textureBlob)
-              textureMap.set(match[1], textureUrl)
-              this.extractedUrls.push(textureUrl)
-            }
-          }
-
-          // 修改MTL文件内容，替换纹理路径
-          let modifiedMtlText = mtlText
-          for (const [originalPath, url] of textureMap.entries()) {
-            modifiedMtlText = modifiedMtlText.replace(new RegExp(`(map_\\w+\\s+)${this.escapeRegExp(originalPath)}`, 'g'), `$1${url}`)
-          }
-
-          // 创建修改后的MTL文件
-          const modifiedMtlBlob = new Blob([modifiedMtlText], { type: 'text/plain' })
-          const modifiedMtlUrl = URL.createObjectURL(modifiedMtlBlob)
-          this.extractedUrls.push(modifiedMtlUrl)
-          mtlUrl = modifiedMtlUrl
-        }
+        mtlUrl = await this.processMtlFile(mtlMatch[1], objDir, zipContent)
       }
 
       // 使用OBJ加载器加载OBJ文件
-      return new Promise((resolve, reject) => {
-        if (mtlUrl) {
-          this.mtlLoader.load(
-            mtlUrl,
-            (mtl) => {
-              mtl.preload()
-              this.objLoader.setMaterials(mtl)
-              this.objLoader.load(objUrl, resolve, undefined, (error) => {
-                this.cleanupExtractedUrls()
-                reject(new Error(`OBJ 加载失败: ${error.message}`))
-              })
-            },
-            undefined,
-            (error) => {
-              this.cleanupExtractedUrls()
-              reject(new Error(`MTL 加载失败: ${error.message}`))
-            }
-          )
-        } else {
-          this.objLoader.load(objUrl, resolve, undefined, (error) => {
-            this.cleanupExtractedUrls()
-            reject(new Error(`OBJ 加载失败: ${error.message}`))
-          })
-        }
-      })
-    } catch (error) {
+      return await this.loadOBJ(objUrl, mtlUrl)
+    } catch (error: any) {
       this.cleanupExtractedUrls()
-      throw new Error(`处理 OBJ 文件失败: ${error.message}`)
+      throw new Error(`处理OBJ文件失败: ${error.message}`)
     }
   }
 
   /**
-   * 加载普通 3D 模型文件
-   * @param file 3D 模型文件（.gltf, .glb, .obj, .fbx）
-   * @returns Promise，解析后的模型对象
+   * 加载OBJ文件及其可能的MTL材质
    */
-  private loadFromFile(file: File): Promise<Object3D> {
-    const fileExtension = this.getFileExtension(file)
-    const url = URL.createObjectURL(file)
-    this.extractedUrls.push(url)
-
-    return new Promise((resolve, reject) => {
-      switch (fileExtension) {
-        case 'gltf':
-        case 'glb':
-          this.gltfLoader.load(
-            url,
-            (gltf) => resolve(gltf.scene || gltf.scenes[0]),
-            undefined,
-            (error) => {
-              this.cleanupExtractedUrls()
-              reject(new Error(`GLTF/GLB 加载失败: ${error.message}`))
-            }
-          )
-          break
-
-        case 'obj':
-          this.loadOBJ(url)
-            .then(resolve)
-            .catch((error) => {
-              this.cleanupExtractedUrls()
-              reject(error)
-            })
-          break
-
-        case 'fbx':
-          this.fbxLoader.load(url, resolve, undefined, (error) => {
-            this.cleanupExtractedUrls()
-            reject(new Error(`FBX 加载失败: ${error.message}`))
-          })
-          break
-
-        default:
-          this.cleanupExtractedUrls()
-          reject(new Error('不支持的 3D 模型格式'))
-          break
-      }
-    })
+  private loadOBJ(url: string, mtlUrl?: string | null): Promise<Object3D> {
+    return this.loadOBJWithMtl(url, mtlUrl)
   }
 
   /**
-   * 获取文件扩展名
-   * @param file 文件
-   * @returns 文件扩展名
+   * 加载OBJ文件及其MTL材质
    */
-  private getFileExtension(file: File): string | undefined {
-    return file.name.split('.').pop()?.toLowerCase()
-  }
-
-  /**
-   * 加载 OBJ 文件，并解析 MTL 材质
-   * @param url OBJ 文件路径
-   * @param mtlUrl MTL 材质文件路径（可选）
-   * @returns Promise，解析后的 OBJ 模型对象
-   */
-  private async loadOBJ(url: string, mtlUrl?: string): Promise<Object3D> {
+  private loadOBJWithMtl(objUrl: string, mtlUrl?: string | null): Promise<Object3D> {
     return new Promise((resolve, reject) => {
       if (mtlUrl) {
+        // 有MTL文件时，先加载MTL
         this.mtlLoader.load(
           mtlUrl,
           (mtl) => {
             mtl.preload()
             this.objLoader.setMaterials(mtl)
-            this.objLoader.load(url, resolve, undefined, (error) => reject(new Error(`OBJ 加载失败: ${error.message}`)))
+            // 然后加载OBJ
+            this.objLoader.load(objUrl, resolve, undefined, (error: any) => {
+              this.cleanupExtractedUrls()
+              reject(new Error(`OBJ加载失败: ${error.message}`))
+            })
           },
           undefined,
-          (error) => reject(new Error(`MTL 加载失败: ${error.message}`))
+          (error: any) => {
+            this.cleanupExtractedUrls()
+            reject(new Error(`MTL加载失败: ${error.message}`))
+          }
         )
       } else {
-        this.objLoader.load(url, resolve, undefined, (error) => reject(new Error(`OBJ 加载失败: ${error.message}`)))
+        // 无MTL时直接加载OBJ
+        this.objLoader.load(objUrl, resolve, undefined, (error: any) => {
+          this.cleanupExtractedUrls()
+          reject(new Error(`OBJ加载失败: ${error.message}`))
+        })
       }
     })
   }
 
   /**
-   * 规范化文件路径
-   * @param path 文件路径
+   * 处理MTL材质文件并提取纹理
+   */
+  private async processMtlFile(mtlFileName: string, baseDir: string, zipContent: JSZip): Promise<string | null> {
+    const mtlPath = this.normalizePath(baseDir + mtlFileName)
+
+    // 检查MTL文件是否存在
+    if (!zipContent.files[mtlPath]) {
+      return null
+    }
+
+    const mtlBlob = await zipContent.files[mtlPath].async('blob')
+    const mtlText = await mtlBlob.text()
+
+    // 查找MTL中引用的所有纹理
+    const textureMatches = [...mtlText.matchAll(/map_\w+\s+([^\s]+)/g), ...mtlText.matchAll(/bump\s+([^\s]+)/g), ...mtlText.matchAll(/disp\s+([^\s]+)/g)]
+
+    // 存储纹理路径和对应的URL
+    const textureMap = new Map<string, string>()
+
+    // 提取所有纹理文件并创建URL
+    for (const match of textureMatches) {
+      const texturePath = this.normalizePath(baseDir + match[1])
+      if (zipContent.files[texturePath]) {
+        const textureBlob = await zipContent.files[texturePath].async('blob')
+        const textureUrl = URL.createObjectURL(textureBlob)
+        textureMap.set(match[1], textureUrl)
+        this.extractedUrls.push(textureUrl)
+      }
+    }
+
+    // 替换MTL中的纹理路径
+    let modifiedMtlText = mtlText
+    for (const [originalPath, url] of textureMap.entries()) {
+      // 替换各种材质贴图引用
+      modifiedMtlText = this.replaceTextureReferences(modifiedMtlText, originalPath, url)
+    }
+
+    // 创建修改后的MTL文件
+    const modifiedMtlBlob = new Blob([modifiedMtlText], { type: 'text/plain' })
+    const modifiedMtlUrl = URL.createObjectURL(modifiedMtlBlob)
+    this.extractedUrls.push(modifiedMtlUrl)
+
+    return modifiedMtlUrl
+  }
+
+  /**
+   * 替换MTL文件中的纹理引用
+   */
+  private replaceTextureReferences(text: string, originalPath: string, newUrl: string): string {
+    const escapedPath = this.escapeRegExp(originalPath)
+    // 替换各种材质属性引用的纹理
+    return text
+      .replace(new RegExp(`(map_\\w+\\s+)${escapedPath}`, 'g'), `$1${newUrl}`)
+      .replace(new RegExp(`(bump\\s+)${escapedPath}`, 'g'), `$1${newUrl}`)
+      .replace(new RegExp(`(disp\\s+)${escapedPath}`, 'g'), `$1${newUrl}`)
+  }
+
+  /**
+   * 在文本中替换所有URI引用
+   */
+  private replaceUrisInText(text: string, uriMap: Map<string, string>): string {
+    let result = text
+    for (const [originalUri, newUrl] of uriMap.entries()) {
+      const escapedUri = this.escapeRegExp(originalUri)
+      result = result.replace(new RegExp(`"${escapedUri}"`, 'g'), `"${newUrl}"`)
+    }
+    return result
+  }
+
+  /**
+   * 加载单个3D模型文件(非ZIP格式)
+   *
+   * @param file 3D模型文件（.gltf, .glb, .obj, .fbx）
+   * @param onProgress 可选的进度回调函数
+   * @returns Promise，解析后的模型对象
+   */
+  private loadFromFile(file: File, onProgress?: (event: ProgressEvent) => void): Promise<Object3D> {
+    const fileExtension = this.getFileExtension(file)
+    const url = this.createObjectURL(file)
+
+    return new Promise((resolve, reject) => {
+      try {
+        // 使用映射代替switch语句
+        const loaderMap: Record<string, () => void> = {
+          gltf: () =>
+            this.gltfLoader.load(
+              url,
+              (gltf) => resolve(gltf.scene || gltf.scenes[0]),
+              onProgress,
+              (error: any) => {
+                this.cleanupExtractedUrls()
+                reject(new Error(`GLTF/GLB加载失败: ${error.message}`))
+              }
+            ),
+          glb: () =>
+            this.gltfLoader.load(
+              url,
+              (gltf) => resolve(gltf.scene || gltf.scenes[0]),
+              onProgress,
+              (error: any) => {
+                this.cleanupExtractedUrls()
+                reject(new Error(`GLTF/GLB加载失败: ${error.message}`))
+              }
+            ),
+          obj: async () => {
+            try {
+              const result = await this.loadOBJ(url)
+              resolve(result)
+            } catch (error) {
+              this.cleanupExtractedUrls()
+              reject(error)
+            }
+          },
+          fbx: () =>
+            this.fbxLoader.load(url, resolve, onProgress, (error: any) => {
+              this.cleanupExtractedUrls()
+              reject(new Error(`FBX加载失败: ${error.message}`))
+            }),
+        }
+
+        const loader = loaderMap[fileExtension]
+        if (!loader) {
+          this.cleanupExtractedUrls()
+          reject(new Error(`不支持的3D模型格式: ${fileExtension}`))
+          return
+        }
+
+        loader()
+      } catch (error: any) {
+        this.cleanupExtractedUrls()
+        reject(new Error(`加载模型时出错: ${error.message}`))
+      }
+    })
+  }
+
+  /**
+   * 加载纹理
+   *
+   * @param file 纹理文件
+   * @returns Promise，解析后的纹理对象
+   */
+  loadTexture(file: File): Promise<Texture> {
+    const url = URL.createObjectURL(file)
+    this.extractedUrls.push(url)
+
+    return new Promise((resolve, reject) => {
+      this.textureLoader.load(
+        url,
+        (texture) => {
+          resolve(texture)
+        },
+        undefined,
+        (error: any) => {
+          this.cleanupExtractedUrls()
+          reject(new Error(`纹理加载失败: ${error.message}`))
+        }
+      )
+    })
+  }
+
+  /**
+   * 获取文件扩展名
+   *
+   * @param file 文件对象
+   * @returns 小写的文件扩展名
+   */
+  private getFileExtension(file: File): string | undefined {
+    const nameParts = file.name.split('.')
+    return nameParts.length > 1 ? nameParts.pop()?.toLowerCase() : undefined
+  }
+
+  /**
+   * 规范化文件路径，处理"./"和"../"引用
+   *
+   * @param path 原始文件路径
    * @returns 规范化后的路径
    */
   private normalizePath(path: string): string {
-    // 处理路径中的 "./" 和 "../"
+    // 分割路径为组件
     const parts = path.split('/')
     const result = []
 
+    // 处理每个路径组件
     for (const part of parts) {
       if (part === '.' || part === '') {
         continue
@@ -400,13 +544,16 @@ export class LoaderManager {
 
   /**
    * 转义正则表达式中的特殊字符
+   *
+   * @param string 要转义的字符串
+   * @returns 转义后的字符串
    */
   private escapeRegExp(string: string): string {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   }
 
   /**
-   * 清理创建的URL对象
+   * 清理所有已创建的URL对象，防止内存泄漏
    */
   private cleanupExtractedUrls(): void {
     for (const url of this.extractedUrls) {
@@ -415,12 +562,11 @@ export class LoaderManager {
     this.extractedUrls = []
   }
 
-  // 清理所有资源和URL
   clear(): void {
     this.cleanupExtractedUrls()
   }
 
-  loadTexture(): void {}
-
-  update(dt: number): void {}
+  update(dt: number): void {
+    // 目前无需实现，预留接口以支持将来的扩展
+  }
 }
