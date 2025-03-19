@@ -1,7 +1,7 @@
 import { container } from '@/three/container/DIContainer'
 
-import { CameraManager } from './CameraManager'
-import { RendererManager } from './RendererManager'
+import type  { CameraManager } from './CameraManager'
+import type  { RendererManager } from './RendererManager'
 
 import {} from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'

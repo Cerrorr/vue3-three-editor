@@ -1,6 +1,6 @@
 import { container } from '@/three/container/DIContainer'
 
-import { SceneManager } from './SceneManager'
+import type  { SceneManager } from './SceneManager'
 
 import { AmbientLight, DirectionalLight, Scene } from 'three'
 

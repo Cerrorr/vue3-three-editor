@@ -6,21 +6,21 @@ const threeContainer = ref<HTMLDivElement | null>(null);
 
 onMounted(() => {
   if (threeContainer.value) {
-    threeService.init(threeContainer.value, { backgroundColor: 0x222222 });
+    threeService.init(threeContainer.value, { debug: true });
   }
 })
 </script>
 
 <template>
- <div ref="threeContainer" id="three-container"></div>
+  <div ref="threeContainer" id="three-container"></div>
 </template>
 
 <style scoped>
-  #three-container {
-    width: 100%;
-    height: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
-  }
+#three-container {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
 </style>

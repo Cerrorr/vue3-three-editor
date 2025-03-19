@@ -8,8 +8,11 @@ import { RendererManager } from './RendererManager'
 import { ControlsManager } from './ControlsManager'
 import { GUIManager } from './GUIManager'
 
-import { Clock } from 'three'
+import { DebugUI } from '@/three/ui/DebugUI' 
 
+import { Clock, Cache } from 'three'
+
+Cache.enabled = true
 
 export class MainManager {
   private sceneManager: SceneManager
@@ -22,7 +25,7 @@ export class MainManager {
   private animationFrameId!: number
   private clock: Clock
 
-  constructor(el: HTMLElement) {
+  constructor(el: HTMLElement, options?: any) {
     container.register('RenderContainer', el)
 
     this.sceneManager = new SceneManager()
@@ -44,19 +47,25 @@ export class MainManager {
     container.register('ControlsManager', this.controlsManager)
 
     this.GUIManager = new GUIManager()
-    container.register('GUImanager',this.GUIManager)
-
+    container.register('GUImanager', this.GUIManager)
 
     this.clock = new Clock()
-    
-    this.upadte = this.upadte.bind(this)
-    this.upadte()
+
+    this.update()
+
+
+    if (options.debug) {
+      // 在 DebugUI 中处理调试界面的初始化
+      this.debugUI = new DebugUI(this.mainManager);
+      this.debugUI.initDebugUI();  // 调用 DebugUI 中的方法来初始化调试 UI
+    }
+    console.log(options)
   }
 
-  private upadte = (): void => {
+  private update = (): void => {
     const dt = this.clock.getDelta()
 
-    this.animationFrameId = requestAnimationFrame(this.upadte)
+    this.animationFrameId = requestAnimationFrame(this.update)
 
     this.sceneManager.update(dt)
     this.cameraManager.update(dt)

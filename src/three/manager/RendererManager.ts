@@ -1,7 +1,7 @@
 import { container } from '@/three/container/DIContainer'
 
-import { SceneManager } from './SceneManager'
-import { CameraManager } from './CameraManager'
+import type  { SceneManager } from './SceneManager'
+import type  { CameraManager } from './CameraManager'
 
 import { WebGLRenderer, SRGBColorSpace } from 'three'
 
