@@ -11,8 +11,7 @@ import { LoaderManager } from './LoaderManager'
 
 import { DebugUI } from '@/three/ui/DebugUI'
 
-import { Clock, Cache } from 'three'
-
+import { Clock, Cache, Object3D, Scene } from 'three'
 
 Cache.enabled = true
 
@@ -28,8 +27,6 @@ export class MainManager {
   private debugUI?: DebugUI
   private animationFrameId!: number
   private clock: Clock
-
-
 
   constructor(el: HTMLElement, options?: any) {
     container.register('RenderContainer', el)
@@ -54,7 +51,6 @@ export class MainManager {
 
     this.loaderManager = new LoaderManager()
     container.register('LoaderManager', this.loaderManager)
-
 
     if (options.debug) {
       this.GUIManager = new GUIManager()
@@ -95,10 +91,15 @@ export class MainManager {
     this.controlsManager.clear()
     this.loaderManager.clear()
 
-
     this.GUIManager && this.GUIManager.clear()
     this.debugUI && this.debugUI.clear()
 
     console.log('Three.js resources cleared.')
+  }
+  // 加载模型
+  async loadModel(file: File): Promise<Object3D> {
+    return await this.loaderManager.loadModel(file, (scene) => {
+      this.sceneManager.getScene().add(scene)
+    })
   }
 }
