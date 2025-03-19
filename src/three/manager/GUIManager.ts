@@ -11,7 +11,6 @@ export class GUIManager {
       title: '调试',
       expanded: true,
     })
-
   }
 
   update(dt: number): void {}

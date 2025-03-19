@@ -7,7 +7,7 @@ class ThreeService {
   init(el: HTMLElement, options?: any): void {
     console.log('Initializing Three.js with element:', el)
     console.log('Options:', options)
-    this.mainManager = new MainManager(el)
+    this.mainManager = new MainManager(el,options)
   }
   // 销毁
   clear(): void {

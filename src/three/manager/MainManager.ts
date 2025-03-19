@@ -7,10 +7,12 @@ import { HelperManager } from './HelperManager'
 import { RendererManager } from './RendererManager'
 import { ControlsManager } from './ControlsManager'
 import { GUIManager } from './GUIManager'
+import { LoaderManager } from './LoaderManager'
 
-import { DebugUI } from '@/three/ui/DebugUI' 
+import { DebugUI } from '@/three/ui/DebugUI'
 
 import { Clock, Cache } from 'three'
+
 
 Cache.enabled = true
 
@@ -21,9 +23,13 @@ export class MainManager {
   private lightManager: LightManager
   private helperManager: HelperManager
   private controlsManager: ControlsManager
-  private GUIManager: GUIManager
+  private loaderManager: LoaderManager
+  private GUIManager?: GUIManager
+  private debugUI?: DebugUI
   private animationFrameId!: number
   private clock: Clock
+
+
 
   constructor(el: HTMLElement, options?: any) {
     container.register('RenderContainer', el)
@@ -46,19 +52,20 @@ export class MainManager {
     this.controlsManager = new ControlsManager()
     container.register('ControlsManager', this.controlsManager)
 
-    this.GUIManager = new GUIManager()
-    container.register('GUImanager', this.GUIManager)
+    this.loaderManager = new LoaderManager()
+    container.register('LoaderManager', this.loaderManager)
+
+
+    if (options.debug) {
+      this.GUIManager = new GUIManager()
+      container.register('GUIManager', this.GUIManager)
+
+      this.debugUI = new DebugUI()
+    }
 
     this.clock = new Clock()
 
     this.update()
-
-
-    if (options.debug) {
-      // 在 DebugUI 中处理调试界面的初始化
-      this.debugUI = new DebugUI(this.mainManager);
-      this.debugUI.initDebugUI();  // 调用 DebugUI 中的方法来初始化调试 UI
-    }
     console.log(options)
   }
 
@@ -73,7 +80,8 @@ export class MainManager {
     this.helperManager.update(dt)
     this.rendererManager.update(dt)
     this.controlsManager.update(dt)
-    this.GUIManager.update(dt)
+
+    this.GUIManager && this.GUIManager.update(dt)
   }
 
   clear(): void {
@@ -85,7 +93,12 @@ export class MainManager {
     this.helperManager.clear()
     this.rendererManager.clear()
     this.controlsManager.clear()
-    this.GUIManager.clear()
+    this.loaderManager.clear()
+
+
+    this.GUIManager && this.GUIManager.clear()
+    this.debugUI && this.debugUI.clear()
+
     console.log('Three.js resources cleared.')
   }
 }
