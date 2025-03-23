@@ -1,19 +1,20 @@
 import { container } from '@/three/container/DIContainer'
 
-import type  { SceneManager } from './SceneManager'
-import type  { CameraManager } from './CameraManager'
+import type { SceneManager } from './SceneManager'
+import type { CameraManager } from './CameraManager'
 
-import { WebGLRenderer, SRGBColorSpace } from 'three'
+import { WebGLRenderer, SRGBColorSpace, PMREMGenerator } from 'three'
 
 export class RendererManager {
   private renderer: WebGLRenderer
   private sceneManager: SceneManager
   private cameraManager: CameraManager
   private el: HTMLElement
+  pmremGenerator: PMREMGenerator
 
   constructor() {
     this.sceneManager = container.resolve<SceneManager>('SceneManager')
-    this.cameraManager = container.resolve<CameraManager>('CameraManager')
+
     this.el = container.resolve<HTMLElement>('RenderContainer')
 
     this.renderer = new WebGLRenderer({ antialias: true })
@@ -22,11 +23,15 @@ export class RendererManager {
     this.renderer.setPixelRatio(window.devicePixelRatio)
     this.renderer.setSize(this.el.clientWidth, this.el.clientHeight)
 
-    this.el.appendChild(this.renderer.domElement)
+    this.pmremGenerator = new PMREMGenerator(this.renderer)
+    this.pmremGenerator.compileEquirectangularShader()
 
+    this.el.appendChild(this.renderer.domElement)
+  }
+  init(): void {
+    this.cameraManager = container.resolve<CameraManager>('CameraManager')
     this.addListener()
   }
-
   render(): void {
     this.renderer.render(this.sceneManager.getScene(), this.cameraManager.getActiveCamera())
   }

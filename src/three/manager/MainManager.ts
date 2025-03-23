@@ -29,8 +29,12 @@ export class MainManager {
   private clock: Clock
 
   constructor(el: HTMLElement, options?: any) {
+    console.log('MainManager constructor started')
+
+    // 注册容器元素
     container.register('RenderContainer', el)
 
+    // 创建所有管理器
     this.sceneManager = new SceneManager()
     container.register('SceneManager', this.sceneManager)
 
@@ -52,7 +56,7 @@ export class MainManager {
     this.loaderManager = new LoaderManager()
     container.register('LoaderManager', this.loaderManager)
 
-    if (options.debug) {
+    if (options?.debug) {
       this.GUIManager = new GUIManager()
       container.register('GUIManager', this.GUIManager)
 
@@ -60,9 +64,42 @@ export class MainManager {
     }
 
     this.clock = new Clock()
+    console.log('All managers created and registered')
 
-    this.update()
-    console.log(options)
+    // 创建后自动初始化
+    this.init()
+  }
+
+  // 初始化方法 - 通过容器循环调用所有管理器的初始化
+  private async init(): Promise<void> {
+    console.log('Initializing all managers')
+
+    try {
+      // 需要初始化的管理器名称列表
+      const managerNames = ['RendererManager', 'CameraManager', 'LoaderManager', 'SceneManager', 'LightManager', 'HelperManager', 'ControlsManager']
+
+      // 按顺序初始化所有管理器
+      for (const name of managerNames) {
+        try {
+          const manager = container.resolve<any>(name)
+
+          // 检查管理器是否有init方法
+          if (manager && typeof manager.init === 'function') {
+            await manager.init()
+            console.log(`${name} initialized`)
+          }
+        } catch (err) {
+          console.warn(`Failed to initialize ${name}:`, err)
+        }
+      }
+
+      console.log('All managers initialized successfully')
+
+      // 启动更新循环
+      this.update()
+    } catch (error) {
+      console.error('Failed to initialize managers:', error)
+    }
   }
 
   private update = (): void => {
@@ -96,6 +133,7 @@ export class MainManager {
 
     console.log('Three.js resources cleared.')
   }
+
   // 加载模型
   async loadModel(file: File): Promise<Object3D> {
     return await this.loaderManager.loadModel(file, (scene) => {

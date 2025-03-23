@@ -20,9 +20,9 @@ export class CameraManager {
 
     this.activeCamera.position.set(0, 5, 5)
   }
-
+  init(): void {}
   // 获取摄像机实例
-  getActiveCamera(): Camera {
+  getActiveCamera(): PerspectiveCamera {
     return this.activeCamera
   }
 

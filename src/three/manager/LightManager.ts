@@ -1,16 +1,16 @@
 import { container } from '@/three/container/DIContainer'
 
-import type  { SceneManager } from './SceneManager'
+import type { SceneManager } from './SceneManager'
 
 import { AmbientLight, DirectionalLight, Scene } from 'three'
 
 export class LightManager {
-  private sceneManager: SceneManager
-  constructor() {
+  private sceneManager!: SceneManager
+  constructor() {}
+  init(): void {
     this.sceneManager = container.resolve<SceneManager>('SceneManager')
     this.createLight(this.sceneManager.getScene())
   }
-
   private createLight(scene: Scene, intensity = 0.5): void {
     const directionalLightRight = new DirectionalLight(0xffffff, intensity)
     directionalLightRight.position.set(0.5, 1.2, 0.5)

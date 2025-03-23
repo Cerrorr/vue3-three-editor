@@ -7,13 +7,13 @@ import {} from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 export class ControlsManager {
-  private cameraManager: CameraManager
-  private rendererManager: RendererManager
-  private controls: OrbitControls
+  private cameraManager!: CameraManager
+  private rendererManager!: RendererManager
+  private controls!: OrbitControls
   constructor() {
-    this.init()
+
   }
-  private init(): void {
+ init(): void {
     this.cameraManager = container.resolve<CameraManager>('CameraManager')
     this.rendererManager = container.resolve<RendererManager>('RendererManager')
 

@@ -16,13 +16,12 @@ export class DebugUI {
     const PARAMS = {
       import: {
         title: '导入',
-        label: '导入模型'
+        label: '导入模型',
       },
     }
 
     const btn = this.gui.addButton(PARAMS.import)
     btn.on('click', () => this.importModel())
-
   }
 
   importModel() {

@@ -1,11 +1,12 @@
 import { container } from '@/three/container/DIContainer'
 import type { RendererManager } from './RendererManager'
 
-import { LoadingManager, Object3D, TextureLoader, Texture } from 'three'
+import { LoadingManager, Object3D, TextureLoader, Texture, SRGBColorSpace, FloatType } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js'
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js'
+import { RGBELoader } from 'three/addons/loaders//RGBELoader.js'
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { MTLLoader } from 'three/examples/jsm/Addons.js'
@@ -25,6 +26,7 @@ export class LoaderManager {
   private fbxLoader: FBXLoader
   private mtlLoader: MTLLoader
   private textureLoader: TextureLoader
+  private hdrLoader: RGBELoader
   rendererManager: RendererManager
 
   // 存储从ZIP提取的文件URL，用于后续清理
@@ -34,8 +36,6 @@ export class LoaderManager {
   private static readonly SUPPORTED_FORMATS = ['gltf', 'glb', 'obj', 'fbx', 'zip']
 
   constructor() {
-    this.rendererManager = container.resolve<RendererManager>('RendererManager')
-
     // 创建加载管理器以跟踪整体加载进度
     this.loadingManager = new LoadingManager(
       () => console.log('所有资源加载完成！'),
@@ -47,9 +47,7 @@ export class LoaderManager {
     this.dracoLoader = new DRACOLoader().setDecoderPath('draco/') // 设置解码器路径
 
     // 初始化KTX2加载器 - 支持高效压缩纹理格式
-    this.ktx2Loader = new KTX2Loader()
-      .setTranscoderPath('basis/') // 设置转码器路径
-      .detectSupport(this.rendererManager.getRenderer()) // 检测浏览器支持
+    this.ktx2Loader = new KTX2Loader().setTranscoderPath('basis/') // 设置转码器路径
 
     // 配置GLTF加载器
     this.gltfLoader = new GLTFLoader(this.loadingManager)
@@ -62,8 +60,12 @@ export class LoaderManager {
     this.fbxLoader = new FBXLoader(this.loadingManager)
     this.mtlLoader = new MTLLoader(this.loadingManager)
     this.textureLoader = new TextureLoader(this.loadingManager)
+    this.hdrLoader = new RGBELoader(this.loadingManager).setDataType(FloatType)
   }
-
+  init(): void {
+    this.rendererManager = container.resolve<RendererManager>('RendererManager')
+    this.ktx2Loader.detectSupport(this.rendererManager.getRenderer()) // 检测浏览器支持
+  }
   // 创建URL并添加到提取列表中的辅助方法
   private createObjectURL(blob: Blob): string {
     const url = URL.createObjectURL(blob)
@@ -428,7 +430,6 @@ export class LoaderManager {
 
     return new Promise((resolve, reject) => {
       try {
-        // 使用映射代替switch语句
         const loaderMap: Record<string, () => void> = {
           gltf: () =>
             this.gltfLoader.load(
@@ -487,20 +488,57 @@ export class LoaderManager {
    * @param file 纹理文件
    * @returns Promise，解析后的纹理对象
    */
-  loadTexture(file: File): Promise<Texture> {
-    const url = URL.createObjectURL(file)
-    this.extractedUrls.push(url)
+  loadTexture(file: File | string, cb?: (tex: Texture) => void): Promise<Texture> {
+    let url: string
+    if (typeof file === 'string') {
+      // 直接使用路径字符串
+      url = file
+    } else {
+      // 是 File 类型，创建 Blob URL
+      url = URL.createObjectURL(file)
+      this.extractedUrls.push(url)
+    }
 
     return new Promise((resolve, reject) => {
       this.textureLoader.load(
         url,
         (texture) => {
+          texture.colorSpace = SRGBColorSpace
           resolve(texture)
+          if (cb) cb(texture)
         },
         undefined,
         (error: any) => {
           this.cleanupExtractedUrls()
           reject(new Error(`纹理加载失败: ${error.message}`))
+        }
+      )
+    })
+  }
+
+  // 加载HDR纹理
+  loadHDRTexture(file: File | string, cb?: (tex: Texture) => void): Promise<Texture> {
+    let url: string
+    if (typeof file === 'string') {
+      // 直接使用路径字符串
+      url = file
+    } else {
+      // 是 File 类型，创建 Blob URL
+      url = URL.createObjectURL(file)
+      this.extractedUrls.push(url)
+    }
+
+    return new Promise((resolve, reject) => {
+      this.hdrLoader.load(
+        url,
+        (texture) => {
+          resolve(texture)
+          if (cb) cb(texture)
+        },
+        undefined,
+        (error: any) => {
+          this.cleanupExtractedUrls()
+          reject(new Error(`HDR纹理加载失败: ${error.message}`))
         }
       )
     })
