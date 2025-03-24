@@ -1,4 +1,6 @@
 import { container } from '@/three/container/DIContainer'
+
+import type { ILoaderManager } from '@/three/interfaces/IResourceManager'
 import type { RendererManager } from './RendererManager'
 
 import { LoadingManager, Object3D, TextureLoader, Texture, SRGBColorSpace, FloatType } from 'three'
@@ -17,7 +19,7 @@ import JSZip from 'jszip'
  * LoaderManager 类 - 负责处理各种3D模型和纹理的加载
  * 支持 GLTF/GLB, OBJ/MTL, FBX 格式以及包含这些模型的ZIP文件
  */
-export class LoaderManager {
+export class LoaderManager implements ILoaderManager {
   private loadingManager: LoadingManager
   private dracoLoader: DRACOLoader
   private ktx2Loader: KTX2Loader
@@ -27,7 +29,7 @@ export class LoaderManager {
   private mtlLoader: MTLLoader
   private textureLoader: TextureLoader
   private hdrLoader: RGBELoader
-  rendererManager: RendererManager
+  private rendererManager!: RendererManager
 
   // 存储从ZIP提取的文件URL，用于后续清理
   private extractedUrls: string[] = []

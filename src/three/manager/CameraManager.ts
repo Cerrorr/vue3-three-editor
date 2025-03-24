@@ -1,8 +1,10 @@
 import { container } from '@/three/container/DIContainer'
 
+import type { ICameraManager } from '@/three/interfaces/IResourceManager'
+
 import { Camera, PerspectiveCamera } from 'three'
 
-export class CameraManager {
+export class CameraManager implements ICameraManager {
   private defaultCamera: PerspectiveCamera
   private activeCamera: PerspectiveCamera
   private el: HTMLElement
@@ -29,6 +31,9 @@ export class CameraManager {
   update(dt: number): void {}
 
   clear(): void {
-    this.activeCamera = undefined!
+    // 清理相机资源
+    this.activeCamera = null!
+    this.defaultCamera = null!
+    console.log('CameraManager cleared')
   }
 }

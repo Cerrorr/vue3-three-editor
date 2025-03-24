@@ -8,10 +8,14 @@ import { RendererManager } from './RendererManager'
 import { ControlsManager } from './ControlsManager'
 import { GUIManager } from './GUIManager'
 import { LoaderManager } from './LoaderManager'
+import { SelectionManager } from './SelectionManager'
+import { EditorInteractionManager } from './EditorInteractionManager'
 
 import { DebugUI } from '@/three/ui/DebugUI'
 
 import { Clock, Cache, Object3D, Scene } from 'three'
+
+
 
 Cache.enabled = true
 
@@ -27,11 +31,10 @@ export class MainManager {
   private debugUI?: DebugUI
   private animationFrameId!: number
   private clock: Clock
+  private selectionManager!: SelectionManager
+  private editorInteractionManager!: EditorInteractionManager
 
   constructor(el: HTMLElement, options?: any) {
-    console.log('MainManager constructor started')
-
-    // 注册容器元素
     container.register('RenderContainer', el)
 
     // 创建所有管理器
@@ -56,6 +59,12 @@ export class MainManager {
     this.loaderManager = new LoaderManager()
     container.register('LoaderManager', this.loaderManager)
 
+    this.selectionManager = new SelectionManager()
+    container.register('SelectionManager', this.selectionManager)
+
+    this.editorInteractionManager = new EditorInteractionManager()
+    container.register('EditorInteractionManager', this.editorInteractionManager)
+
     if (options?.debug) {
       this.GUIManager = new GUIManager()
       container.register('GUIManager', this.GUIManager)
@@ -76,7 +85,17 @@ export class MainManager {
 
     try {
       // 需要初始化的管理器名称列表
-      const managerNames = ['RendererManager', 'CameraManager', 'LoaderManager', 'SceneManager', 'LightManager', 'HelperManager', 'ControlsManager']
+      const managerNames = [
+        'RendererManager',     // 先初始化渲染器
+        'CameraManager',       // 再初始化相机
+        'LoaderManager',       // 再初始化加载器
+        'SceneManager',        // 再初始化场景
+        'LightManager',        // 再初始化灯光
+        'HelperManager',       // 再初始化辅助工具
+        'ControlsManager',     // 初始化控制器
+        'SelectionManager',    // 初始化选择管理器
+        'EditorInteractionManager', // 最后初始化编辑交互管理器
+      ]
 
       // 按顺序初始化所有管理器
       for (const name of managerNames) {
@@ -113,6 +132,8 @@ export class MainManager {
     this.helperManager.update(dt)
     this.rendererManager.update(dt)
     this.controlsManager.update(dt)
+    this.selectionManager.update(dt)
+    this.editorInteractionManager.update(dt)
 
     this.GUIManager && this.GUIManager.update(dt)
   }
@@ -127,13 +148,14 @@ export class MainManager {
     this.rendererManager.clear()
     this.controlsManager.clear()
     this.loaderManager.clear()
+    this.selectionManager.clear()
+    this.editorInteractionManager.clear()
 
     this.GUIManager && this.GUIManager.clear()
     this.debugUI && this.debugUI.clear()
 
     console.log('Three.js resources cleared.')
   }
-
   // 加载模型
   async loadModel(file: File): Promise<Object3D> {
     return await this.loaderManager.loadModel(file, (scene) => {

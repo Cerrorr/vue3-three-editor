@@ -1,14 +1,15 @@
 import { container } from '@/three/container/DIContainer'
 
+import type { IRendererManager } from '@/three/interfaces/IResourceManager'
 import type { SceneManager } from './SceneManager'
 import type { CameraManager } from './CameraManager'
 
 import { WebGLRenderer, SRGBColorSpace, PMREMGenerator } from 'three'
 
-export class RendererManager {
+export class RendererManager implements IRendererManager {
   private renderer: WebGLRenderer
   private sceneManager: SceneManager
-  private cameraManager: CameraManager
+  private cameraManager!: CameraManager
   private el: HTMLElement
   pmremGenerator: PMREMGenerator
 

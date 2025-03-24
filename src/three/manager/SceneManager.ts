@@ -2,14 +2,14 @@ import { container } from '../container/DIContainer'
 
 import type { LoaderManager } from './LoaderManager'
 import type { RendererManager } from './RendererManager'
+import type { ISceneManager } from '../interfaces/IResourceManager'
 
-import { Scene, Texture } from 'three'
+import { Scene } from 'three'
 
-export class SceneManager {
+export class SceneManager implements ISceneManager {
   private loaderManager!: LoaderManager
   private rendererManager!: RendererManager
   private scene: Scene
-
 
   constructor() {
     this.scene = new Scene()
@@ -22,8 +22,13 @@ export class SceneManager {
   }
 
   private async setEnvironment(): Promise<void> {
-    const hdrTexture = await this.loaderManager.loadHDRTexture('textures/hdr/kloofendal_48d_partly_cloudy_puresky_1k.hdr')
-    this.scene.environment = this.rendererManager.pmremGenerator.fromEquirectangular(hdrTexture).texture
+    const hdrTexture = await this.loaderManager.loadHDRTexture(
+      'textures/hdr/kloofendal_48d_partly_cloudy_puresky_1k.hdr'
+    )
+    this.scene.environment =
+      this.rendererManager.pmremGenerator.fromEquirectangular(
+        hdrTexture
+      ).texture
   }
 
   getScene(): Scene {
